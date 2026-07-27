@@ -1,0 +1,14 @@
+{
+  "name": "tic-tac-toe-online",
+  "version": "1.0.0",
+  "description": "Modern online Tic Tac Toe with CPU and Socket.IO multiplayer.",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
