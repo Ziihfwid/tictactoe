@@ -1,67 +1,102 @@
-const socket = window.gameSocket;
+const socket =
+window.gameSocket;
 
-const $ = selector =>
-document.querySelector(selector);
+let currentMode =
+null;
 
-const $$ = selector =>
-[...document.querySelectorAll(selector)];
+let difficulty =
+"medium";
 
-let currentMode = null;
+let board =
+Array(9).fill("");
 
-let difficulty = "hard";
+let turn =
+"X";
 
-let board = Array(9).fill("");
+let winner =
+null;
 
-let turn = "X";
+let winningLine =
+[];
 
-let winner = null;
+let mySymbol =
+"X";
 
-let winningLine = [];
+let roomId =
+null;
 
-let mySymbol = "X";
+let restartClicked =
+false;
 
-let roomId = null;
+let username =
+localStorage.getItem(
+"ttt_username"
+)
+||
+"Player";
 
-let restartReady = false;
+let stats =
+JSON.parse(
+localStorage.getItem(
+"ttt_stats"
+)
+||
+JSON.stringify({
 
-let currentUsername =
-localStorage.getItem("ttt_username") || "";
+```
+  games: 0,
 
-let stats = JSON.parse(
-localStorage.getItem("ttt_stats") ||
-'{"games":0,"wins":0,"losses":0,"draws":0}'
+  wins: 0,
+
+  losses: 0,
+
+  draws: 0
+
+})
+```
+
 );
 
-// -----------------------------
-// INITIAL SETUP
-// -----------------------------
+// =================================
+// HELPERS
+// =================================
 
-if ($("#usernameInput")) {
+function $(selector) {
 
-$("#usernameInput").value =
-currentUsername;
+return document.querySelector(
+selector
+);
 }
 
-// -----------------------------
-// SCREEN SYSTEM
-// -----------------------------
+function $$(selector) {
+
+return [
+...document.querySelectorAll(
+selector
+)
+];
+}
 
 function showScreen(id) {
 
-$$(".screen").forEach(screen => {
+$$(".screen").forEach(
+screen => {
 
 ```
-screen.classList.remove(
-  "active"
+  screen.classList.remove(
+    "active"
+  );
+}
+```
+
 );
-```
-
-});
 
 const screen =
-$("#" + id);
+$(`#${id}`);
 
-if (screen) {
+if (
+screen
+) {
 
 ```
 screen.classList.add(
@@ -72,83 +107,196 @@ screen.classList.add(
 }
 }
 
-// -----------------------------
-// USERNAME
-// -----------------------------
-
 function getUsername() {
 
-const value =
-$("#usernameInput")
-?.value
-?.trim()
-|| "Player";
+const input =
+$("#usernameInput");
 
-currentUsername =
-value;
+if (
+input &&
+input.value.trim()
+) {
+
+```
+username =
+  input.value.trim();
 
 localStorage.setItem(
-"ttt_username",
-value
+  "ttt_username",
+  username
 );
+```
 
-return value;
 }
 
-// -----------------------------
-// TOAST
-// -----------------------------
+return username;
+}
 
-function toast(message) {
+function showMessage(message) {
 
-const element =
+const toast =
 $("#toast");
 
-if (!element) {
+if (
+toast
+) {
 
 ```
-alert(message);
+toast.textContent =
+  message;
 
-return;
-```
-
-}
-
-element.textContent =
-message;
-
-element.classList.add(
-"show"
-);
-
-setTimeout(() => {
-
-```
-element.classList.remove(
+toast.classList.add(
   "show"
 );
+
+setTimeout(
+  () => {
+
+    toast.classList.remove(
+      "show"
+    );
+
+  },
+  2500
+);
 ```
 
-}, 2400);
+} else {
+
+```
+alert(
+  message
+);
+```
+
+}
 }
 
-// -----------------------------
-// STATISTICS
-// -----------------------------
+// =================================
+// WIN CHECKING
+// =================================
+
+function checkWinner(
+currentBoard
+) {
+
+const lines = [
+
+```
+[0, 1, 2],
+
+[3, 4, 5],
+
+[6, 7, 8],
+
+[0, 3, 6],
+
+[1, 4, 7],
+
+[2, 5, 8],
+
+[0, 4, 8],
+
+[2, 4, 6]
+```
+
+];
+
+for (
+const line of lines
+) {
+
+```
+const [
+  a,
+  b,
+  c
+] = line;
+
+if (
+
+  currentBoard[a] !== ""
+
+  &&
+
+  currentBoard[a] ===
+  currentBoard[b]
+
+  &&
+
+  currentBoard[a] ===
+  currentBoard[c]
+
+) {
+
+  return {
+
+    winner:
+      currentBoard[a],
+
+    line
+
+  };
+}
+```
+
+}
+
+if (
+currentBoard.every(
+cell =>
+cell !== ""
+)
+) {
+
+```
+return {
+
+  winner:
+    "draw",
+
+  line: []
+
+};
+```
+
+}
+
+return {
+
+```
+winner:
+  null,
+
+line: []
+```
+
+};
+}
+
+// =================================
+// STATS
+// =================================
 
 function saveStats() {
 
 localStorage.setItem(
 "ttt_stats",
-JSON.stringify(stats)
+JSON.stringify(
+stats
+)
 );
 }
 
-function updateStats(result) {
+function recordResult(
+result
+) {
 
 stats.games++;
 
-if (result === "draw") {
+if (
+result === "draw"
+) {
 
 ```
 stats.draws++;
@@ -171,118 +319,43 @@ stats.losses++;
 }
 
 saveStats();
-
-updateProfile();
 }
 
-function updateProfile() {
+// =================================
+// CPU AI
+// =================================
 
-if (!$("#profileName")) {
-
-```
-return;
-```
-
-}
-
-$("#profileName").textContent =
-currentUsername || "Player";
-
-$("#statGames").textContent =
-stats.games;
-
-$("#statWins").textContent =
-stats.wins;
-
-$("#statLosses").textContent =
-stats.losses;
-
-$("#statDraws").textContent =
-stats.draws;
-
-const winRate =
-stats.games > 0
-? Math.round(
-stats.wins /
-stats.games *
-100
-)
-: 0;
-
-$("#statWinRate").textContent =
-`${winRate}%`;
-}
-
-// -----------------------------
-// CPU GAME
-// -----------------------------
-
-function startCPU(level) {
-
-currentMode =
-"cpu";
-
-difficulty =
-level;
-
-board =
-Array(9).fill("");
-
-turn =
-"X";
-
-winner =
-null;
-
-winningLine =
-[];
-
-mySymbol =
-"X";
-
-restartReady =
-false;
-
-$("#gameModeLabel").textContent =
-`CPU MATCH • ${level.toUpperCase()}`;
-
-$("#playerXName").textContent =
-getUsername();
-
-$("#playerOName").textContent =
-"CPU";
-
-showScreen(
-"gameScreen"
-);
-
-render();
-}
-
-// -----------------------------
-// CPU MOVE
-// -----------------------------
-
-function getAvailableMoves() {
+function availableMoves() {
 
 return board
-.map((value, index) =>
-value === ""
-? index
-: null
+.map(
+(
+cell,
+index
+) =>
+
+```
+    cell === ""
+      ? index
+      : null
+
 )
 .filter(
-index =>
-index !== null
+  index =>
+    index !== null
 );
+```
+
 }
 
-function getRandomMove() {
+function randomMove() {
 
-const available =
-getAvailableMoves();
+const moves =
+availableMoves();
 
-if (!available.length) {
+if (
+!moves.length
+) {
 
 ```
 return null;
@@ -290,21 +363,22 @@ return null;
 
 }
 
-return available[
+return moves[
 Math.floor(
-Math.random() *
-available.length
+Math.random()
+*
+moves.length
 )
 ];
 }
 
-function findWinningMove(symbol) {
-
-const available =
-getAvailableMoves();
+function winningMove(
+symbol
+) {
 
 for (
-const index of available
+const index of
+availableMoves()
 ) {
 
 ```
@@ -312,13 +386,16 @@ board[index] =
   symbol;
 
 const result =
-  checkWinner(board);
+  checkWinner(
+    board
+  );
 
 board[index] =
   "";
 
 if (
-  result.winner === symbol
+  result.winner ===
+  symbol
 ) {
 
   return index;
@@ -330,37 +407,38 @@ if (
 return null;
 }
 
-function getSmartMove() {
+function smartMove() {
 
-// 1. CPU can win
-const winningMove =
-findWinningMove("O");
+const win =
+winningMove(
+"O"
+);
 
 if (
-winningMove !== null
+win !== null
 ) {
 
 ```
-return winningMove;
+return win;
 ```
 
 }
 
-// 2. Block player
-const blockingMove =
-findWinningMove("X");
+const block =
+winningMove(
+"X"
+);
 
 if (
-blockingMove !== null
+block !== null
 ) {
 
 ```
-return blockingMove;
+return block;
 ```
 
 }
 
-// 3. Center
 if (
 board[4] === ""
 ) {
@@ -371,7 +449,6 @@ return 4;
 
 }
 
-// 4. Corners
 const corners =
 [
 0,
@@ -390,7 +467,8 @@ corners.length
 ```
 return corners[
   Math.floor(
-    Math.random() *
+    Math.random()
+    *
     corners.length
   )
 ];
@@ -398,236 +476,78 @@ return corners[
 
 }
 
-// 5. Any empty square
-return getRandomMove();
+return randomMove();
 }
 
-function getCPUMove() {
+function cpuMove() {
 
-// EASY
 if (
-difficulty === "easy"
+difficulty ===
+"easy"
 ) {
 
 ```
-return getRandomMove();
+return randomMove();
 ```
 
 }
 
-// MEDIUM
 if (
-difficulty === "medium"
+difficulty ===
+"medium"
 ) {
 
 ```
-// Medium makes mistakes often enough
-// for the player to beat it.
+// Medium is deliberately imperfect.
 if (
-  Math.random() < 0.4
+  Math.random()
+  <
+  0.45
 ) {
 
-  return getRandomMove();
+  return randomMove();
 }
 
-return getSmartMove();
+return smartMove();
 ```
 
 }
 
-// HARD
+// Hard is strong, but still beatable.
 if (
-difficulty === "hard"
-) {
-
-```
-// Hard is very strong but not perfect.
-// This gives the player a real chance.
-if (
-  Math.random() < 0.15
-) {
-
-  return getRandomMove();
-}
-
-return getSmartMove();
-```
-
-}
-
-return getRandomMove();
-}
-
-function makeCPUMove() {
-
-if (
-currentMode !== "cpu"
-||
-winner
-||
-turn !== "O"
-) {
-
-```
-return;
-```
-
-}
-
-const move =
-getCPUMove();
-
-if (
-move === null
-) {
-
-```
-return;
-```
-
-}
-
-board[move] =
-"O";
-
-const result =
-checkWinner(board);
-
-if (
-result.winner
-) {
-
-```
-winner =
-  result.winner;
-
-winningLine =
-  result.line;
-
-updateStats(
-  winner
-);
-```
-
-} else {
-
-```
-turn =
-  "X";
-```
-
-}
-
-render();
-}
-
-// -----------------------------
-// BOARD CLICK
-// -----------------------------
-
-function handleCellClick(index) {
-
-if (
-winner
-||
-board[index]
-) {
-
-```
-return;
-```
-
-}
-
-// CPU GAME
-if (
-currentMode === "cpu"
+difficulty ===
+"hard"
 ) {
 
 ```
 if (
-  turn !== "X"
+  Math.random()
+  <
+  0.18
 ) {
 
-  return;
+  return randomMove();
 }
 
-board[index] =
-  "X";
-
-const result =
-  checkWinner(board);
-
-if (
-  result.winner
-) {
-
-  winner =
-    result.winner;
-
-  winningLine =
-    result.line;
-
-  updateStats(
-    winner
-  );
-
-} else {
-
-  turn =
-    "O";
-
-  render();
-
-  setTimeout(
-    makeCPUMove,
-    500
-  );
-
-  return;
-}
-
-render();
-
-return;
+return smartMove();
 ```
 
 }
 
-// ONLINE GAME
-if (
-currentMode === "online"
-) {
-
-```
-if (
-  turn !== mySymbol
-) {
-
-  toast(
-    "It is not your turn."
-  );
-
-  return;
+return randomMove();
 }
 
-socket.emit(
-  "move",
-  index
-);
-```
+// =================================
+// RENDER
+// =================================
 
-}
-}
-
-// -----------------------------
-// RENDER BOARD
-// -----------------------------
-
-function render() {
+function renderBoard() {
 
 $$(".cell").forEach(
-(cell, index) => {
+(
+cell,
+index
+) => {
 
 ```
   cell.textContent =
@@ -657,7 +577,7 @@ $$(".cell").forEach(
     );
   }
 
-  const disabled =
+  cell.disabled =
     Boolean(
       board[index]
     )
@@ -667,64 +587,45 @@ $$(".cell").forEach(
     )
     ||
     (
-      currentMode === "cpu"
+      currentMode ===
+      "cpu"
       &&
-      turn !== "X"
+      turn !==
+      "X"
     )
     ||
     (
-      currentMode === "online"
+      currentMode ===
+      "online"
       &&
-      turn !== mySymbol
+      turn !==
+      mySymbol
     );
-
-  cell.disabled =
-    disabled;
 }
 ```
 
 );
 
+const status =
+$("#statusText");
+
 if (
-$("#playerX")
+!status
 ) {
 
 ```
-$("#playerX")
-  .classList
-  .toggle(
-    "active",
-    turn === "X"
-    &&
-    !winner
-  );
+return;
 ```
 
 }
 
 if (
-$("#playerO")
+winner ===
+"draw"
 ) {
 
 ```
-$("#playerO")
-  .classList
-  .toggle(
-    "active",
-    turn === "O"
-    &&
-    !winner
-  );
-```
-
-}
-
-if (
-winner === "draw"
-) {
-
-```
-$("#statusText").textContent =
+status.textContent =
   "Draw!";
 ```
 
@@ -733,27 +634,26 @@ winner
 ) {
 
 ```
-$("#statusText").textContent =
+status.textContent =
   `Player ${winner} Wins!`;
 ```
 
 } else if (
-currentMode === "cpu"
+currentMode ===
+"cpu"
 ) {
 
 ```
-$("#statusText").textContent =
+status.textContent =
   turn === "X"
     ? "Your turn"
     : "CPU is thinking...";
 ```
 
-} else if (
-currentMode === "online"
-) {
+} else {
 
 ```
-$("#statusText").textContent =
+status.textContent =
   turn === mySymbol
     ? "Your turn"
     : "Opponent's turn";
@@ -762,14 +662,19 @@ $("#statusText").textContent =
 }
 }
 
-// -----------------------------
-// ONLINE GAME
-// -----------------------------
+// =================================
+// CPU GAME
+// =================================
 
-function startOnlineGame() {
+function startCPU(
+selectedDifficulty
+) {
 
 currentMode =
-"online";
+"cpu";
+
+difficulty =
+selectedDifficulty;
 
 board =
 Array(9).fill("");
@@ -783,22 +688,38 @@ null;
 winningLine =
 [];
 
-restartReady =
+mySymbol =
+"X";
+
+restartClicked =
 false;
 
-$("#gameModeLabel").textContent =
-"ONLINE MATCH";
+$("#gameModeLabel")
+&&
+(
+$("#gameModeLabel")
+.textContent =
+`VS CPU • ${difficulty.toUpperCase()}`
+);
 
 showScreen(
 "gameScreen"
 );
 
-render();
+renderBoard();
 }
 
-function updateOnlinePlayers(players) {
+function playCPU() {
 
-if (!players) {
+if (
+currentMode !==
+"cpu"
+||
+winner
+||
+turn !==
+"X"
+) {
 
 ```
 return;
@@ -806,126 +727,261 @@ return;
 
 }
 
-Object.entries(
-players
-).forEach(
-([id, player]) => {
+const result =
+checkWinner(
+board
+);
+
+if (
+result.winner
+) {
+
+```
+winner =
+  result.winner;
+
+winningLine =
+  result.line;
+
+recordResult(
+  winner
+);
+
+renderBoard();
+
+return;
+```
+
+}
+
+const move =
+cpuMove();
+
+if (
+move === null
+) {
+
+```
+return;
+```
+
+}
+
+board[move] =
+"O";
+
+const cpuResult =
+checkWinner(
+board
+);
+
+if (
+cpuResult.winner
+) {
+
+```
+winner =
+  cpuResult.winner;
+
+winningLine =
+  cpuResult.line;
+
+recordResult(
+  winner
+);
+```
+
+} else {
+
+```
+turn =
+  "X";
+```
+
+}
+
+renderBoard();
+}
+
+function handleCPUClick(
+index
+) {
+
+if (
+winner
+||
+turn !== "X"
+||
+board[index] !== ""
+) {
+
+```
+return;
+```
+
+}
+
+board[index] =
+"X";
+
+const result =
+checkWinner(
+board
+);
+
+if (
+result.winner
+) {
+
+```
+winner =
+  result.winner;
+
+winningLine =
+  result.line;
+
+recordResult(
+  winner
+);
+
+renderBoard();
+
+return;
+```
+
+}
+
+turn =
+"O";
+
+renderBoard();
+
+setTimeout(
+() => {
 
 ```
   if (
-    id === socket.id
+    !winner
   ) {
 
-    mySymbol =
-      player.symbol;
-
-    $("#playerXName").textContent =
-      player.symbol === "X"
-        ? player.username
-        : "Opponent";
-
-    $("#playerOName").textContent =
-      player.symbol === "O"
-        ? player.username
-        : "Opponent";
+    playCPU();
   }
-}
+
+},
+450
 ```
 
 );
+}
 
-const playerList =
-Object.values(
-players
+// =================================
+// ONLINE GAME
+// =================================
+
+function startOnline() {
+
+currentMode =
+"online";
+
+restartClicked =
+false;
+
+showScreen(
+"gameScreen"
 );
 
-const xPlayer =
-playerList.find(
-player =>
-player.symbol === "X"
-);
+renderBoard();
+}
 
-const oPlayer =
-playerList.find(
-player =>
-player.symbol === "O"
-);
+function handleOnlineClick(
+index
+) {
 
 if (
-xPlayer
+winner
+||
+board[index] !== ""
+||
+turn !== mySymbol
 ) {
 
 ```
-$("#playerXName").textContent =
-  xPlayer.username;
+return;
 ```
 
 }
 
-if (
-oPlayer
-) {
-
-```
-$("#playerOName").textContent =
-  oPlayer.username;
-```
-
-}
+socket.emit(
+"move",
+index
+);
 }
 
-// -----------------------------
+// =================================
 // RESTART
-// -----------------------------
+// =================================
 
 function restartGame() {
 
 if (
-currentMode === "online"
+currentMode ===
+"cpu"
+) {
+
+```
+board =
+  Array(9).fill("");
+
+turn =
+  "X";
+
+winner =
+  null;
+
+winningLine =
+  [];
+
+restartClicked =
+  false;
+
+renderBoard();
+
+return;
+```
+
+}
+
+if (
+currentMode ===
+"online"
 ) {
 
 ```
 if (
-  restartReady
+  restartClicked
 ) {
 
-  toast(
+  showMessage(
     "You are already ready."
   );
 
   return;
 }
 
-restartReady =
+restartClicked =
   true;
 
 socket.emit(
   "requestRestart"
 );
-
-return;
 ```
 
 }
-
-board =
-Array(9).fill("");
-
-turn =
-"X";
-
-winner =
-null;
-
-winningLine =
-[];
-
-render();
 }
 
-// -----------------------------
-// BUTTON EVENTS
-// -----------------------------
+// =================================
+// BUTTONS
+// =================================
 
 $("#cpuBtn")
 ?.addEventListener(
@@ -969,22 +1025,6 @@ $("#settingsBtn")
 
 );
 
-$("#profileBtn")
-?.addEventListener(
-"click",
-() => {
-
-```
-  updateProfile();
-
-  showScreen(
-    "profileScreen"
-  );
-}
-```
-
-);
-
 $$(
 "[data-difficulty]"
 ).forEach(
@@ -1007,26 +1047,6 @@ button.addEventListener(
 );
 
 $$(
-"[data-back]"
-).forEach(
-button => {
-
-```
-button.addEventListener(
-  "click",
-  () => {
-
-    showScreen(
-      button.dataset.back
-    );
-  }
-);
-```
-
-}
-);
-
-$$(
 ".cell"
 ).forEach(
 cell => {
@@ -1036,11 +1056,29 @@ cell.addEventListener(
   "click",
   () => {
 
-    handleCellClick(
+    const index =
       Number(
         cell.dataset.index
-      )
-    );
+      );
+
+    if (
+      currentMode ===
+      "cpu"
+    ) {
+
+      handleCPUClick(
+        index
+      );
+
+    } else if (
+      currentMode ===
+      "online"
+    ) {
+
+      handleOnlineClick(
+        index
+      );
+    }
   }
 );
 ```
@@ -1054,21 +1092,12 @@ $("#restartBtn")
 restartGame
 );
 
-$("#restartBottomBtn")
-?.addEventListener(
-"click",
-restartGame
-);
-
 $("#returnMenuBtn")
 ?.addEventListener(
 "click",
 () => {
 
 ```
-  currentMode =
-    null;
-
   showScreen(
     "menuScreen"
   );
@@ -1076,27 +1105,6 @@ $("#returnMenuBtn")
 ```
 
 );
-
-$("#gameMenuBtn")
-?.addEventListener(
-"click",
-() => {
-
-```
-  currentMode =
-    null;
-
-  showScreen(
-    "menuScreen"
-  );
-}
-```
-
-);
-
-// -----------------------------
-// QUICK MATCH
-// -----------------------------
 
 $("#quickMatchBtn")
 ?.addEventListener(
@@ -1104,13 +1112,13 @@ $("#quickMatchBtn")
 () => {
 
 ```
-  const name =
-    getUsername();
-
   socket.emit(
     "quickMatch",
     {
-      username: name
+
+      username:
+        getUsername()
+
     }
   );
 
@@ -1140,10 +1148,6 @@ $("#cancelSearchBtn")
 
 );
 
-// -----------------------------
-// PRIVATE ROOM
-// -----------------------------
-
 $("#createRoomBtn")
 ?.addEventListener(
 "click",
@@ -1153,8 +1157,10 @@ $("#createRoomBtn")
   socket.emit(
     "createPrivateRoom",
     {
+
       username:
         getUsername()
+
     }
   );
 }
@@ -1168,19 +1174,12 @@ $("#joinRoomBtn")
 () => {
 
 ```
-  const code =
-    $("#roomCodeInput")
-      .value
-      .trim()
-      .toUpperCase();
+  const input =
+    $("#roomCodeInput");
 
   if (
-    code.length !== 5
+    !input
   ) {
-
-    toast(
-      "Enter a valid room code."
-    );
 
     return;
   }
@@ -1188,11 +1187,15 @@ $("#joinRoomBtn")
   socket.emit(
     "joinPrivateRoom",
     {
+
       username:
         getUsername(),
 
       roomId:
-        code
+        input.value
+          .trim()
+          .toUpperCase()
+
     }
   );
 }
@@ -1200,36 +1203,9 @@ $("#joinRoomBtn")
 
 );
 
-$("#copyRoomBtn")
-?.addEventListener(
-"click",
-async () => {
-
-```
-  if (
-    !roomId
-  ) {
-
-    return;
-  }
-
-  await navigator
-    .clipboard
-    .writeText(
-      roomId
-    );
-
-  toast(
-    "Room code copied."
-  );
-}
-```
-
-);
-
-// -----------------------------
+// =================================
 // SOCKET EVENTS
-// -----------------------------
+// =================================
 
 socket.on(
 "privateRoomCreated",
@@ -1239,9 +1215,16 @@ data => {
 roomId =
   data.roomId;
 
-$("#roomCodeDisplay")
-  .textContent =
-  roomId;
+const display =
+  $("#roomCodeDisplay");
+
+if (
+  display
+) {
+
+  display.textContent =
+    roomId;
+}
 
 showScreen(
   "roomScreen"
@@ -1272,7 +1255,7 @@ data => {
 roomId =
   data.roomId;
 
-startOnlineGame();
+startOnline();
 ```
 
 }
@@ -1284,6 +1267,24 @@ state => {
 
 ```
 if (
+  state.players
+) {
+
+  const me =
+    state.players[
+      socket.id
+    ];
+
+  if (
+    me
+  ) {
+
+    mySymbol =
+      me.symbol;
+  }
+}
+
+if (
   state.roomId
 ) {
 
@@ -1292,14 +1293,11 @@ if (
 }
 
 if (
-  currentMode !== "online"
-  &&
-  Object.keys(
-    state.players || {}
-  ).length > 0
+  currentMode !==
+  "online"
 ) {
 
-  startOnlineGame();
+  startOnline();
 }
 
 board =
@@ -1312,41 +1310,11 @@ winner =
   state.winner;
 
 winningLine =
-  state.winningLine || [];
+  state.winningLine
+  ||
+  [];
 
-updateOnlinePlayers(
-  state.players
-);
-
-if (
-  winner
-  &&
-  currentMode === "online"
-) {
-
-  if (
-    winner === "draw"
-    ||
-    winner === mySymbol
-    ||
-    winner !== mySymbol
-  ) {
-
-    updateStats(
-      winner
-    );
-  }
-}
-
-if (
-  !winner
-) {
-
-  restartReady =
-    false;
-}
-
-render();
+renderBoard();
 ```
 
 }
@@ -1357,12 +1325,28 @@ socket.on(
 data => {
 
 ```
-restartReady =
-  true;
+const status =
+  $("#statusText");
 
-$("#statusText")
-  .textContent =
-  `${data.ready}/${data.total} Ready`;
+if (
+  status
+) {
+
+  status.textContent =
+    `${data.ready}/${data.total} Ready`;
+}
+```
+
+}
+);
+
+socket.on(
+"restartStarted",
+() => {
+
+```
+restartClicked =
+  false;
 ```
 
 }
@@ -1373,13 +1357,20 @@ socket.on(
 () => {
 
 ```
-toast(
+showMessage(
   "Opponent disconnected."
 );
 
-$("#statusText")
-  .textContent =
-  "Opponent disconnected";
+const status =
+  $("#statusText");
+
+if (
+  status
+) {
+
+  status.textContent =
+    "Opponent disconnected";
+}
 ```
 
 }
@@ -1390,47 +1381,26 @@ socket.on(
 message => {
 
 ```
-toast(
+showMessage(
   message
 );
+
+restartClicked =
+  false;
 ```
 
 }
 );
 
-window.addEventListener(
-"socketError",
+socket.on(
+"connect_error",
 () => {
 
 ```
-toast(
-  "Could not connect to server."
+showMessage(
+  "Could not connect to the server."
 );
 ```
 
 }
 );
-
-// -----------------------------
-// SETTINGS
-// -----------------------------
-
-$("#themeSelect")
-?.addEventListener(
-"change",
-event => {
-
-```
-  document.body
-    .classList
-    .toggle(
-      "darker",
-      event.target.value ===
-      "darker"
-    );
-}
-```
-
-);
-
-updateProfile();
