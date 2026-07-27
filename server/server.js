@@ -2,8 +2,18 @@ const path = require("path");
 const http = require("http");
 const express = require("express");
 const { Server } = require("socket.io");
-const { createRoom, getRoom, deleteRoom } = require("./rooms");
-const { checkWinner, isValidMove } = require("./gameLogic");
+
+const {
+createRoom,
+getRoom,
+deleteRoom
+} = require("./rooms");
+
+const {
+checkWinner,
+isValidMove
+} = require("./gameLogic");
+
 const matchmaking = require("./matchmaking");
 
 const app = express();
@@ -11,130 +21,465 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
+
 const clientPath = path.join(__dirname, "..", "client");
 
 app.use(express.static(clientPath));
 
 function makeRoomCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code;
-  do {
-    code = Array.from({ length: 5 }, () =>
-      chars[Math.floor(Math.random() * chars.length)]
-    ).join("");
-  } while (getRoom(code));
-  return code;
+const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+let code;
+
+do {
+code = Array.from(
+{ length: 5 },
+() => chars[Math.floor(Math.random() * chars.length)]
+).join("");
+} while (getRoom(code));
+
+return code;
 }
 
 function publicState(room) {
-  return {
-    roomId: room.roomId,
-    board: room.board,
-    turn: room.turn,
-    winner: room.winner,
-    winningLine: room.winningLine,
-    players: Object.fromEntries(
-      Object.entries(room.players).map(([id, p]) => [id, {
-        username: p.username,
-        symbol: p.symbol
-      }])
-    )
-  };
+return {
+roomId: room.roomId,
+board: room.board,
+turn: room.turn,
+winner: room.winner,
+winningLine: room.winningLine,
+
+```
+players: Object.fromEntries(
+  Object.entries(room.players).map(([id, player]) => [
+    id,
+    {
+      username: player.username,
+      symbol: player.symbol
+    }
+  ])
+)
+```
+
+};
 }
 
 function joinRoom(socket, room, username, symbol) {
-  room.players[socket.id] = { username, symbol };
-  socket.join(room.roomId);
-  socket.data.roomId = room.roomId;
-  socket.data.symbol = symbol;
-  io.to(room.roomId).emit("state", publicState(room));
+room.players[socket.id] = {
+username,
+symbol
+};
+
+socket.join(room.roomId);
+
+socket.data.roomId = room.roomId;
+socket.data.symbol = symbol;
+socket.data.username = username;
+
+io.to(room.roomId).emit(
+"state",
+publicState(room)
+);
 }
 
 io.on("connection", socket => {
-  socket.on("createPrivateRoom", ({ username }) => {
-    const room = createRoom(makeRoomCode());
-    joinRoom(socket, room, username || "Player", "X");
-    socket.emit("privateRoomCreated", { roomId: room.roomId });
-  });
 
-  socket.on("joinPrivateRoom", ({ username, roomId }) => {
-    const code = String(roomId || "").trim().toUpperCase();
-    const room = getRoom(code);
+console.log("Player connected:", socket.id);
 
-    if (!room) return socket.emit("errorMessage", "Room not found.");
-    if (Object.keys(room.players).length >= 2) {
-      return socket.emit("errorMessage", "That room is full.");
-    }
+// -----------------------------
+// CREATE PRIVATE ROOM
+// -----------------------------
 
-    joinRoom(socket, room, username || "Player", "O");
-  });
+socket.on("createPrivateRoom", ({ username }) => {
 
-  socket.on("quickMatch", ({ username }) => {
-    const opponent = matchmaking.addPlayer(socket);
+```
+const room = createRoom(
+  makeRoomCode()
+);
 
-    if (!opponent) {
-      socket.data.searching = true;
-      socket.emit("matchSearching");
-      return;
-    }
+joinRoom(
+  socket,
+  room,
+  username || "Player",
+  "X"
+);
 
-    opponent.data.searching = false;
-    const room = createRoom(makeRoomCode());
+socket.emit(
+  "privateRoomCreated",
+  {
+    roomId: room.roomId
+  }
+);
+```
 
-    joinRoom(opponent, room, opponent.data.username || "Player", "X");
-    joinRoom(socket, room, username || "Player", "O");
-    io.to(room.roomId).emit("matchFound", { roomId: room.roomId });
-    io.to(room.roomId).emit("state", publicState(room));
-  });
+});
 
-  socket.on("move", position => {
-    const room = getRoom(socket.data.roomId);
-    if (!room || room.winner) return;
+// -----------------------------
+// JOIN PRIVATE ROOM
+// -----------------------------
 
-    const player = room.players[socket.id];
-    if (!player) return socket.emit("errorMessage", "You are not in this game.");
-    if (player.symbol !== room.turn) return socket.emit("errorMessage", "It is not your turn.");
-    if (!isValidMove(room.board, position)) return socket.emit("errorMessage", "Invalid move.");
+socket.on("joinPrivateRoom", ({ username, roomId }) => {
 
-    room.board[position] = player.symbol;
-    const result = checkWinner(room.board);
+```
+const code = String(roomId || "")
+  .trim()
+  .toUpperCase();
 
-    if (result.winner) {
-      room.winner = result.winner;
-      room.winningLine = result.line;
-    } else {
-      room.turn = room.turn === "X" ? "O" : "X";
-    }
+const room = getRoom(code);
 
-    io.to(room.roomId).emit("state", publicState(room));
-  });
+if (!room) {
 
-  socket.on("cancelSearch", () => {
-    matchmaking.removePlayer(socket);
-    socket.data.searching = false;
-  });
+  return socket.emit(
+    "errorMessage",
+    "Room not found."
+  );
+}
 
-  socket.on("disconnect", () => {
-    matchmaking.removePlayer(socket);
+if (
+  Object.keys(room.players).length >= 2
+) {
 
-    const room = getRoom(socket.data.roomId);
-    if (!room) return;
+  return socket.emit(
+    "errorMessage",
+    "That room is full."
+  );
+}
 
-    delete room.players[socket.id];
-    socket.to(room.roomId).emit("opponentDisconnected");
+joinRoom(
+  socket,
+  room,
+  username || "Player",
+  "O"
+);
 
-    if (Object.keys(room.players).length === 0) {
-      deleteRoom(room.roomId);
-    } else {
-      io.to(room.roomId).emit("state", publicState(room));
-    }
-  });
+io.to(room.roomId).emit(
+  "state",
+  publicState(room)
+);
+```
+
+});
+
+// -----------------------------
+// QUICK MATCH
+// -----------------------------
+
+socket.on("quickMatch", ({ username }) => {
+
+```
+const opponent =
+  matchmaking.addPlayer(socket);
+
+if (!opponent) {
+
+  socket.data.searching = true;
+
+  socket.data.username =
+    username || "Player";
+
+  socket.emit(
+    "matchSearching"
+  );
+
+  return;
+}
+
+opponent.data.searching = false;
+
+const room = createRoom(
+  makeRoomCode()
+);
+
+joinRoom(
+  opponent,
+  room,
+  opponent.data.username || "Player",
+  "X"
+);
+
+joinRoom(
+  socket,
+  room,
+  username || "Player",
+  "O"
+);
+
+io.to(room.roomId).emit(
+  "matchFound",
+  {
+    roomId: room.roomId
+  }
+);
+
+io.to(room.roomId).emit(
+  "state",
+  publicState(room)
+);
+```
+
+});
+
+// -----------------------------
+// SERVER-VALIDATED MOVE
+// -----------------------------
+
+socket.on("move", position => {
+
+```
+const room = getRoom(
+  socket.data.roomId
+);
+
+if (!room) {
+
+  return socket.emit(
+    "errorMessage",
+    "You are not in a game."
+  );
+}
+
+if (room.winner) {
+
+  return socket.emit(
+    "errorMessage",
+    "This game is already over."
+  );
+}
+
+const player =
+  room.players[socket.id];
+
+if (!player) {
+
+  return socket.emit(
+    "errorMessage",
+    "You are not in this room."
+  );
+}
+
+if (
+  player.symbol !== room.turn
+) {
+
+  return socket.emit(
+    "errorMessage",
+    "It is not your turn."
+  );
+}
+
+if (
+  !isValidMove(
+    room.board,
+    position
+  )
+) {
+
+  return socket.emit(
+    "errorMessage",
+    "Invalid move."
+  );
+}
+
+room.board[position] =
+  player.symbol;
+
+const result =
+  checkWinner(room.board);
+
+if (result.winner) {
+
+  room.winner =
+    result.winner;
+
+  room.winningLine =
+    result.line;
+
+} else {
+
+  room.turn =
+    room.turn === "X"
+      ? "O"
+      : "X";
+}
+
+io.to(room.roomId).emit(
+  "state",
+  publicState(room)
+);
+```
+
+});
+
+// -----------------------------
+// ONLINE RESTART READY SYSTEM
+// -----------------------------
+
+socket.on("requestRestart", () => {
+
+```
+const room = getRoom(
+  socket.data.roomId
+);
+
+if (!room) {
+
+  return socket.emit(
+    "errorMessage",
+    "Game room not found."
+  );
+}
+
+if (
+  Object.keys(room.players).length < 2
+) {
+
+  return socket.emit(
+    "errorMessage",
+    "Waiting for another player."
+  );
+}
+
+if (!room.restartReady) {
+
+  room.restartReady = [];
+}
+
+if (
+  !room.restartReady.includes(
+    socket.id
+  )
+) {
+
+  room.restartReady.push(
+    socket.id
+  );
+}
+
+const ready =
+  room.restartReady.length;
+
+io.to(room.roomId).emit(
+  "restartStatus",
+  {
+    ready,
+    total: 2
+  }
+);
+
+if (ready >= 2) {
+
+  room.board =
+    Array(9).fill("");
+
+  room.turn = "X";
+
+  room.winner = null;
+
+  room.winningLine = [];
+
+  room.restartReady = [];
+
+  io.to(room.roomId).emit(
+    "state",
+    publicState(room)
+  );
+}
+```
+
+});
+
+// -----------------------------
+// CANCEL MATCHMAKING
+// -----------------------------
+
+socket.on("cancelSearch", () => {
+
+```
+matchmaking.removePlayer(
+  socket
+);
+
+socket.data.searching =
+  false;
+```
+
+});
+
+// -----------------------------
+// DISCONNECT
+// -----------------------------
+
+socket.on("disconnect", () => {
+
+```
+console.log(
+  "Player disconnected:",
+  socket.id
+);
+
+matchmaking.removePlayer(
+  socket
+);
+
+const room =
+  getRoom(
+    socket.data.roomId
+  );
+
+if (!room) {
+
+  return;
+}
+
+delete room.players[
+  socket.id
+];
+
+io.to(room.roomId).emit(
+  "opponentDisconnected"
+);
+
+if (
+  Object.keys(room.players).length === 0
+) {
+
+  deleteRoom(
+    room.roomId
+  );
+
+} else {
+
+  room.restartReady = [];
+
+  io.to(room.roomId).emit(
+    "state",
+    publicState(room)
+  );
+}
+```
+
+});
 });
 
 app.get("*", (_, res) => {
-  res.sendFile(path.join(clientPath, "index.html"));
+
+res.sendFile(
+path.join(
+clientPath,
+"index.html"
+)
+);
 });
 
-server.listen(PORT, () => {
-  console.log(`Tic Tac Toe running at http://localhost:${PORT}`);
-});
+server.listen(
+PORT,
+() => {
+
+```
+console.log(
+  `Tic Tac Toe running at http://localhost:${PORT}`
+);
+```
+
+}
+);
