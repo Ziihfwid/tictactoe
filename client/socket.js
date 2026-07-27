@@ -1,5 +1,3 @@
-window.gameSocket = io();
+const socket = io();
 
-window.gameSocket.on("connect_error", () => {
-  window.dispatchEvent(new CustomEvent("socketError"));
-});
+window.gameSocket = socket;
