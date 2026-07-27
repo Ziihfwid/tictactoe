@@ -1,337 +1,1436 @@
 const socket = window.gameSocket;
 
-const $ = selector => document.querySelector(selector);
-const $$ = selector => [...document.querySelectorAll(selector)];
+const $ = selector =>
+document.querySelector(selector);
+
+const $$ = selector =>
+[...document.querySelectorAll(selector)];
 
 let currentMode = null;
-let difficulty = "hard";
-let board = Array(9).fill("");
-let turn = "X";
-let winner = null;
-let winningLine = [];
-let mySymbol = "X";
-let roomId = null;
-let currentUsername = localStorage.getItem("ttt_username") || "";
-let stats = JSON.parse(localStorage.getItem("ttt_stats") || '{"games":0,"wins":0,"losses":0,"draws":0}');
 
-$("#usernameInput").value = currentUsername;
+let difficulty = "hard";
+
+let board = Array(9).fill("");
+
+let turn = "X";
+
+let winner = null;
+
+let winningLine = [];
+
+let mySymbol = "X";
+
+let roomId = null;
+
+let restartReady = false;
+
+let currentUsername =
+localStorage.getItem("ttt_username") || "";
+
+let stats = JSON.parse(
+localStorage.getItem("ttt_stats") ||
+'{"games":0,"wins":0,"losses":0,"draws":0}'
+);
+
+// -----------------------------
+// INITIAL SETUP
+// -----------------------------
+
+if ($("#usernameInput")) {
+
+$("#usernameInput").value =
+currentUsername;
+}
+
+// -----------------------------
+// SCREEN SYSTEM
+// -----------------------------
 
 function showScreen(id) {
-  $$(".screen").forEach(s => s.classList.remove("active"));
-  $("#" + id).classList.add("active");
+
+$$(".screen").forEach(screen => {
+
+```
+screen.classList.remove(
+  "active"
+);
+```
+
+});
+
+const screen =
+$("#" + id);
+
+if (screen) {
+
+```
+screen.classList.add(
+  "active"
+);
+```
+
+}
 }
 
-function username() {
-  const value = $("#usernameInput").value.trim() || "Player";
-  localStorage.setItem("ttt_username", value);
-  return value;
+// -----------------------------
+// USERNAME
+// -----------------------------
+
+function getUsername() {
+
+const value =
+$("#usernameInput")
+?.value
+?.trim()
+|| "Player";
+
+currentUsername =
+value;
+
+localStorage.setItem(
+"ttt_username",
+value
+);
+
+return value;
 }
+
+// -----------------------------
+// TOAST
+// -----------------------------
 
 function toast(message) {
-  $("#toast").textContent = message;
-  $("#toast").classList.add("show");
-  setTimeout(() => $("#toast").classList.remove("show"), 2400);
+
+const element =
+$("#toast");
+
+if (!element) {
+
+```
+alert(message);
+
+return;
+```
+
 }
 
-function updateStats(result, mySide = "X") {
-  stats.games++;
-  if (result === "draw") stats.draws++;
-  else if (result === mySide) stats.wins++;
-  else stats.losses++;
-  localStorage.setItem("ttt_stats", JSON.stringify(stats));
+element.textContent =
+message;
+
+element.classList.add(
+"show"
+);
+
+setTimeout(() => {
+
+```
+element.classList.remove(
+  "show"
+);
+```
+
+}, 2400);
+}
+
+// -----------------------------
+// STATISTICS
+// -----------------------------
+
+function saveStats() {
+
+localStorage.setItem(
+"ttt_stats",
+JSON.stringify(stats)
+);
+}
+
+function updateStats(result) {
+
+stats.games++;
+
+if (result === "draw") {
+
+```
+stats.draws++;
+```
+
+} else if (
+result === mySymbol
+) {
+
+```
+stats.wins++;
+```
+
+} else {
+
+```
+stats.losses++;
+```
+
+}
+
+saveStats();
+
+updateProfile();
 }
 
 function updateProfile() {
-  const games = stats.games;
-  $("#profileName").textContent = currentUsername || "Player";
-  $("#statGames").textContent = games;
-  $("#statWins").textContent = stats.wins;
-  $("#statLosses").textContent = stats.losses;
-  $("#statDraws").textContent = stats.draws;
-  $("#statWinRate").textContent = games ? Math.round(stats.wins / games * 100) + "%" : "0%";
+
+if (!$("#profileName")) {
+
+```
+return;
+```
+
 }
+
+$("#profileName").textContent =
+currentUsername || "Player";
+
+$("#statGames").textContent =
+stats.games;
+
+$("#statWins").textContent =
+stats.wins;
+
+$("#statLosses").textContent =
+stats.losses;
+
+$("#statDraws").textContent =
+stats.draws;
+
+const winRate =
+stats.games > 0
+? Math.round(
+stats.wins /
+stats.games *
+100
+)
+: 0;
+
+$("#statWinRate").textContent =
+`${winRate}%`;
+}
+
+// -----------------------------
+// CPU GAME
+// -----------------------------
 
 function startCPU(level) {
-  currentMode = "cpu";
-  difficulty = level;
-  board = Array(9).fill("");
-  turn = "X";
-  winner = null;
-  winningLine = [];
-  mySymbol = "X";
 
-  $("#gameModeLabel").textContent = `CPU MATCH • ${level.toUpperCase()}`;
-  $("#playerXName").textContent = username();
-  $("#playerOName").textContent = "CPU";
-  showScreen("gameScreen");
-  render();
+currentMode =
+"cpu";
+
+difficulty =
+level;
+
+board =
+Array(9).fill("");
+
+turn =
+"X";
+
+winner =
+null;
+
+winningLine =
+[];
+
+mySymbol =
+"X";
+
+restartReady =
+false;
+
+$("#gameModeLabel").textContent =
+`CPU MATCH • ${level.toUpperCase()}`;
+
+$("#playerXName").textContent =
+getUsername();
+
+$("#playerOName").textContent =
+"CPU";
+
+showScreen(
+"gameScreen"
+);
+
+render();
 }
+
+// -----------------------------
+// CPU MOVE
+// -----------------------------
+
+function getAvailableMoves() {
+
+return board
+.map((value, index) =>
+value === ""
+? index
+: null
+)
+.filter(
+index =>
+index !== null
+);
+}
+
+function getRandomMove() {
+
+const available =
+getAvailableMoves();
+
+if (!available.length) {
+
+```
+return null;
+```
+
+}
+
+return available[
+Math.floor(
+Math.random() *
+available.length
+)
+];
+}
+
+function findWinningMove(symbol) {
+
+const available =
+getAvailableMoves();
+
+for (
+const index of available
+) {
+
+```
+board[index] =
+  symbol;
+
+const result =
+  checkWinner(board);
+
+board[index] =
+  "";
+
+if (
+  result.winner === symbol
+) {
+
+  return index;
+}
+```
+
+}
+
+return null;
+}
+
+function getSmartMove() {
+
+// 1. CPU can win
+const winningMove =
+findWinningMove("O");
+
+if (
+winningMove !== null
+) {
+
+```
+return winningMove;
+```
+
+}
+
+// 2. Block player
+const blockingMove =
+findWinningMove("X");
+
+if (
+blockingMove !== null
+) {
+
+```
+return blockingMove;
+```
+
+}
+
+// 3. Center
+if (
+board[4] === ""
+) {
+
+```
+return 4;
+```
+
+}
+
+// 4. Corners
+const corners =
+[
+0,
+2,
+6,
+8
+].filter(
+index =>
+board[index] === ""
+);
+
+if (
+corners.length
+) {
+
+```
+return corners[
+  Math.floor(
+    Math.random() *
+    corners.length
+  )
+];
+```
+
+}
+
+// 5. Any empty square
+return getRandomMove();
+}
+
+function getCPUMove() {
+
+// EASY
+if (
+difficulty === "easy"
+) {
+
+```
+return getRandomMove();
+```
+
+}
+
+// MEDIUM
+if (
+difficulty === "medium"
+) {
+
+```
+// Medium makes mistakes often enough
+// for the player to beat it.
+if (
+  Math.random() < 0.4
+) {
+
+  return getRandomMove();
+}
+
+return getSmartMove();
+```
+
+}
+
+// HARD
+if (
+difficulty === "hard"
+) {
+
+```
+// Hard is very strong but not perfect.
+// This gives the player a real chance.
+if (
+  Math.random() < 0.15
+) {
+
+  return getRandomMove();
+}
+
+return getSmartMove();
+```
+
+}
+
+return getRandomMove();
+}
+
+function makeCPUMove() {
+
+if (
+currentMode !== "cpu"
+||
+winner
+||
+turn !== "O"
+) {
+
+```
+return;
+```
+
+}
+
+const move =
+getCPUMove();
+
+if (
+move === null
+) {
+
+```
+return;
+```
+
+}
+
+board[move] =
+"O";
+
+const result =
+checkWinner(board);
+
+if (
+result.winner
+) {
+
+```
+winner =
+  result.winner;
+
+winningLine =
+  result.line;
+
+updateStats(
+  winner
+);
+```
+
+} else {
+
+```
+turn =
+  "X";
+```
+
+}
+
+render();
+}
+
+// -----------------------------
+// BOARD CLICK
+// -----------------------------
+
+function handleCellClick(index) {
+
+if (
+winner
+||
+board[index]
+) {
+
+```
+return;
+```
+
+}
+
+// CPU GAME
+if (
+currentMode === "cpu"
+) {
+
+```
+if (
+  turn !== "X"
+) {
+
+  return;
+}
+
+board[index] =
+  "X";
+
+const result =
+  checkWinner(board);
+
+if (
+  result.winner
+) {
+
+  winner =
+    result.winner;
+
+  winningLine =
+    result.line;
+
+  updateStats(
+    winner
+  );
+
+} else {
+
+  turn =
+    "O";
+
+  render();
+
+  setTimeout(
+    makeCPUMove,
+    500
+  );
+
+  return;
+}
+
+render();
+
+return;
+```
+
+}
+
+// ONLINE GAME
+if (
+currentMode === "online"
+) {
+
+```
+if (
+  turn !== mySymbol
+) {
+
+  toast(
+    "It is not your turn."
+  );
+
+  return;
+}
+
+socket.emit(
+  "move",
+  index
+);
+```
+
+}
+}
+
+// -----------------------------
+// RENDER BOARD
+// -----------------------------
 
 function render() {
-  $$(".cell").forEach((cell, i) => {
-    cell.textContent = board[i];
-    cell.className = "cell";
-    if (board[i]) cell.classList.add(board[i].toLowerCase());
-    if (winningLine.includes(i)) cell.classList.add("win");
-    cell.disabled = Boolean(board[i]) || Boolean(winner) || (currentMode === "cpu" && turn !== "X");
-  });
 
-  const xPlayer = $("#playerX");
-  const oPlayer = $("#playerO");
-  xPlayer.classList.toggle("active", turn === "X" && !winner);
-  oPlayer.classList.toggle("active", turn === "O" && !winner);
+$$(".cell").forEach(
+(cell, index) => {
 
-  if (winner === "draw") $("#statusText").textContent = "Draw!";
-  else if (winner) $("#statusText").textContent = `Player ${winner} Wins!`;
-  else $("#statusText").textContent = currentMode === "cpu"
-    ? (turn === "X" ? "Your turn" : "CPU is thinking...")
-    : `Player ${turn}'s turn`;
-}
+```
+  cell.textContent =
+    board[index];
 
-function checkWinner(b) {
-  const lines = [
-    [0,1,2],[3,4,5],[6,7,8],
-    [0,3,6],[1,4,7],[2,5,8],
-    [0,4,8],[2,4,6]
-  ];
+  cell.className =
+    "cell";
 
-  for (const line of lines) {
-    const [a,b2,c] = line;
-    if (b[a] && b[a] === b[b2] && b[a] === b[c]) {
-      return { winner: b[a], line };
-    }
+  if (
+    board[index]
+  ) {
+
+    cell.classList.add(
+      board[index]
+        .toLowerCase()
+    );
   }
 
-  return b.every(Boolean) ? { winner: "draw", line: [] } : { winner: null, line: [] };
-}
+  if (
+    winningLine.includes(
+      index
+    )
+  ) {
 
-function makeMove(index, symbol) {
-  if (winner || board[index]) return;
-  board[index] = symbol;
-  const result = checkWinner(board);
-  winner = result.winner;
-  winningLine = result.line;
-
-  if (winner) {
-    updateStats(winner, "X");
-  } else {
-    turn = symbol === "X" ? "O" : "X";
+    cell.classList.add(
+      "win"
+    );
   }
 
-  render();
+  const disabled =
+    Boolean(
+      board[index]
+    )
+    ||
+    Boolean(
+      winner
+    )
+    ||
+    (
+      currentMode === "cpu"
+      &&
+      turn !== "X"
+    )
+    ||
+    (
+      currentMode === "online"
+      &&
+      turn !== mySymbol
+    );
+
+  cell.disabled =
+    disabled;
+}
+```
+
+);
+
+if (
+$("#playerX")
+) {
+
+```
+$("#playerX")
+  .classList
+  .toggle(
+    "active",
+    turn === "X"
+    &&
+    !winner
+  );
+```
+
 }
 
-function available(b) {
-  return b.map((v, i) => v ? null : i).filter(v => v !== null);
+if (
+$("#playerO")
+) {
+
+```
+$("#playerO")
+  .classList
+  .toggle(
+    "active",
+    turn === "O"
+    &&
+    !winner
+  );
+```
+
 }
 
-function findWinningMove(b, symbol) {
-  for (const i of available(b)) {
-    const copy = [...b];
-    copy[i] = symbol;
-    if (checkWinner(copy).winner === symbol) return i;
+if (
+winner === "draw"
+) {
+
+```
+$("#statusText").textContent =
+  "Draw!";
+```
+
+} else if (
+winner
+) {
+
+```
+$("#statusText").textContent =
+  `Player ${winner} Wins!`;
+```
+
+} else if (
+currentMode === "cpu"
+) {
+
+```
+$("#statusText").textContent =
+  turn === "X"
+    ? "Your turn"
+    : "CPU is thinking...";
+```
+
+} else if (
+currentMode === "online"
+) {
+
+```
+$("#statusText").textContent =
+  turn === mySymbol
+    ? "Your turn"
+    : "Opponent's turn";
+```
+
+}
+}
+
+// -----------------------------
+// ONLINE GAME
+// -----------------------------
+
+function startOnlineGame() {
+
+currentMode =
+"online";
+
+board =
+Array(9).fill("");
+
+turn =
+"X";
+
+winner =
+null;
+
+winningLine =
+[];
+
+restartReady =
+false;
+
+$("#gameModeLabel").textContent =
+"ONLINE MATCH";
+
+showScreen(
+"gameScreen"
+);
+
+render();
+}
+
+function updateOnlinePlayers(players) {
+
+if (!players) {
+
+```
+return;
+```
+
+}
+
+Object.entries(
+players
+).forEach(
+([id, player]) => {
+
+```
+  if (
+    id === socket.id
+  ) {
+
+    mySymbol =
+      player.symbol;
+
+    $("#playerXName").textContent =
+      player.symbol === "X"
+        ? player.username
+        : "Opponent";
+
+    $("#playerOName").textContent =
+      player.symbol === "O"
+        ? player.username
+        : "Opponent";
   }
-  return null;
+}
+```
+
+);
+
+const playerList =
+Object.values(
+players
+);
+
+const xPlayer =
+playerList.find(
+player =>
+player.symbol === "X"
+);
+
+const oPlayer =
+playerList.find(
+player =>
+player.symbol === "O"
+);
+
+if (
+xPlayer
+) {
+
+```
+$("#playerXName").textContent =
+  xPlayer.username;
+```
+
 }
 
-function mediumMove() {
-  const win = findWinningMove(board, "O");
-  if (win !== null) return win;
+if (
+oPlayer
+) {
 
-  const block = findWinningMove(board, "X");
-  if (block !== null) return block;
+```
+$("#playerOName").textContent =
+  oPlayer.username;
+```
 
-  if (!board[4]) return 4;
-
-  const corners = [0, 2, 6, 8].filter(i => !board[i]);
-  if (corners.length) return corners[Math.floor(Math.random() * corners.length)];
-
-  return available(board)[0];
+}
 }
 
-function minimax(b, maximizing) {
-  const result = checkWinner(b);
-  if (result.winner === "O") return 10;
-  if (result.winner === "X") return -10;
-  if (result.winner === "draw") return 0;
+// -----------------------------
+// RESTART
+// -----------------------------
 
-  const moves = available(b);
+function restartGame() {
 
-  if (maximizing) {
-    let best = -Infinity;
-    for (const i of moves) {
-      b[i] = "O";
-      best = Math.max(best, minimax(b, false));
-      b[i] = "";
-    }
-    return best;
-  } else {
-    let best = Infinity;
-    for (const i of moves) {
-      b[i] = "X";
-      best = Math.min(best, minimax(b, true));
-      b[i] = "";
-    }
-    return best;
-  }
+if (
+currentMode === "online"
+) {
+
+```
+if (
+  restartReady
+) {
+
+  toast(
+    "You are already ready."
+  );
+
+  return;
 }
 
-function hardMove() {
-  let bestScore = -Infinity;
-  let move = available(board)[0];
+restartReady =
+  true;
 
-  for (const i of available(board)) {
-    board[i] = "O";
-    const score = minimax(board, false);
-    board[i] = "";
-    if (score > bestScore) {
-      bestScore = score;
-      move = i;
-    }
-  }
+socket.emit(
+  "requestRestart"
+);
 
-  return move;
+return;
+```
+
 }
 
-function cpuMove() {
-  if (winner) return;
+board =
+Array(9).fill("");
 
-  let move;
-  if (difficulty === "easy") {
-    const moves = available(board);
-    move = moves[Math.floor(Math.random() * moves.length)];
-  } else if (difficulty === "medium") {
-    move = mediumMove();
-  } else {
-    move = hardMove();
-  }
+turn =
+"X";
 
-  setTimeout(() => {
-    if (!winner && turn === "O") makeMove(move, "O");
-  }, 450);
+winner =
+null;
+
+winningLine =
+[];
+
+render();
 }
 
-function resetGame() {
-  if (currentMode === "cpu") startCPU(difficulty);
-  else if (roomId) socket.emit("move", -1);
+// -----------------------------
+// BUTTON EVENTS
+// -----------------------------
+
+$("#cpuBtn")
+?.addEventListener(
+"click",
+() => {
+
+```
+  showScreen(
+    "difficultyScreen"
+  );
 }
+```
 
-$$(".cell").forEach(cell => {
-  cell.addEventListener("click", () => {
-    const index = Number(cell.dataset.index);
+);
 
-    if (currentMode === "cpu") {
-      if (turn === "X" && !board[index]) {
-        makeMove(index, "X");
-        if (!winner) cpuMove();
-      }
-    } else {
-      socket.emit("move", index);
-    }
-  });
-});
+$("#onlineBtn")
+?.addEventListener(
+"click",
+() => {
 
-$("#cpuBtn").onclick = () => showScreen("difficultyScreen");
-$("#onlineBtn").onclick = () => showScreen("onlineScreen");
-$("#settingsBtn").onclick = () => showScreen("settingsScreen");
-$("#profileBtn").onclick = () => {
+```
+  showScreen(
+    "onlineScreen"
+  );
+}
+```
+
+);
+
+$("#settingsBtn")
+?.addEventListener(
+"click",
+() => {
+
+```
+  showScreen(
+    "settingsScreen"
+  );
+}
+```
+
+);
+
+$("#profileBtn")
+?.addEventListener(
+"click",
+() => {
+
+```
   updateProfile();
-  showScreen("profileScreen");
-};
 
-$$("[data-difficulty]").forEach(btn => {
-  btn.onclick = () => startCPU(btn.dataset.difficulty);
-});
+  showScreen(
+    "profileScreen"
+  );
+}
+```
 
-$$("[data-back]").forEach(btn => {
-  btn.onclick = () => showScreen(btn.dataset.back);
-});
+);
 
-$("#restartBtn").onclick = resetGame;
-$("#restartBottomBtn").onclick = resetGame;
+$$(
+"[data-difficulty]"
+).forEach(
+button => {
 
-$("#returnMenuBtn").onclick = () => {
-  if (roomId) socket.emit("cancelSearch");
-  roomId = null;
-  currentMode = null;
-  showScreen("menuScreen");
-};
+```
+button.addEventListener(
+  "click",
+  () => {
 
-$("#gameMenuBtn").onclick = () => $("#returnMenuBtn").click();
+    startCPU(
+      button.dataset
+        .difficulty
+    );
+  }
+);
+```
 
-$("#quickMatchBtn").onclick = () => {
-  currentMode = "online";
-  socket.emit("quickMatch", { username: username() });
-  showScreen("waitingScreen");
-};
+}
+);
 
-$("#cancelSearchBtn").onclick = () => {
-  socket.emit("cancelSearch");
-  showScreen("onlineScreen");
-};
+$$(
+"[data-back]"
+).forEach(
+button => {
 
-$("#createRoomBtn").onclick = () => {
-  currentMode = "online";
-  socket.emit("createPrivateRoom", { username: username() });
-};
+```
+button.addEventListener(
+  "click",
+  () => {
 
-$("#joinRoomBtn").onclick = () => {
-  const code = $("#roomCodeInput").value.trim().toUpperCase();
-  if (code.length !== 5) return toast("Enter a valid 5-character room code.");
-  currentMode = "online";
-  socket.emit("joinPrivateRoom", { username: username(), roomId: code });
-};
+    showScreen(
+      button.dataset.back
+    );
+  }
+);
+```
 
-$("#copyRoomBtn").onclick = async () => {
-  await navigator.clipboard.writeText(roomId);
-  toast("Room code copied.");
-};
+}
+);
 
-$("#soundToggle").onchange = e => localStorage.setItem("ttt_sound", e.target.checked);
-$("#animationToggle").onchange = e => document.body.classList.toggle("no-animations", !e.target.checked);
-$("#themeSelect").onchange = e => document.body.classList.toggle("darker", e.target.value === "darker");
+$$(
+".cell"
+).forEach(
+cell => {
 
-socket.on("matchSearching", () => showScreen("waitingScreen"));
+```
+cell.addEventListener(
+  "click",
+  () => {
 
-socket.on("privateRoomCreated", data => {
-  roomId = data.roomId;
-  $("#roomCodeDisplay").textContent = roomId;
-  showScreen("roomScreen");
-});
+    handleCellClick(
+      Number(
+        cell.dataset.index
+      )
+    );
+  }
+);
+```
 
-socket.on("matchFound", data => {
-  roomId = data.roomId;
-  toast("Opponent found!");
-});
+}
+);
 
-socket.on("state", state => {
-  if (!roomId) roomId = state.roomId;
+$("#restartBtn")
+?.addEventListener(
+"click",
+restartGame
+);
 
-  board = state.board;
-  turn = state.turn;
-  winner = state.winner;
-  winningLine = state.winningLine;
+$("#restartBottomBtn")
+?.addEventListener(
+"click",
+restartGame
+);
 
-  const me = state.players[socket.id];
-  const opponent = Object.entries(state.players).find(([id]) => id !== socket.id)?.[1];
+$("#returnMenuBtn")
+?.addEventListener(
+"click",
+() => {
 
-  if (me) mySymbol = me.symbol;
-  $("#playerXName").textContent = Object.values(state.players).find(p => p.symbol === "X")?.username || "Waiting...";
-  $("#playerOName").textContent = Object.values(state.players).find(p => p.symbol === "O")?.username || "Waiting...";
+```
+  currentMode =
+    null;
 
-  if (winner && winner !== "draw") updateStats(winner, mySymbol);
-  if (winner === "draw") updateStats("draw", mySymbol);
+  showScreen(
+    "menuScreen"
+  );
+}
+```
 
-  showScreen("gameScreen");
-  render();
-});
+);
 
-socket.on("opponentDisconnected", () => {
-  toast("Opponent disconnected.");
-  $("#statusText").textContent = "Opponent disconnected";
-});
+$("#gameMenuBtn")
+?.addEventListener(
+"click",
+() => {
 
-socket.on("errorMessage", message => toast(message));
-socket.on("socketError", () => toast("Connection failed. Is the server running?"));
+```
+  currentMode =
+    null;
+
+  showScreen(
+    "menuScreen"
+  );
+}
+```
+
+);
+
+// -----------------------------
+// QUICK MATCH
+// -----------------------------
+
+$("#quickMatchBtn")
+?.addEventListener(
+"click",
+() => {
+
+```
+  const name =
+    getUsername();
+
+  socket.emit(
+    "quickMatch",
+    {
+      username: name
+    }
+  );
+
+  showScreen(
+    "waitingScreen"
+  );
+}
+```
+
+);
+
+$("#cancelSearchBtn")
+?.addEventListener(
+"click",
+() => {
+
+```
+  socket.emit(
+    "cancelSearch"
+  );
+
+  showScreen(
+    "onlineScreen"
+  );
+}
+```
+
+);
+
+// -----------------------------
+// PRIVATE ROOM
+// -----------------------------
+
+$("#createRoomBtn")
+?.addEventListener(
+"click",
+() => {
+
+```
+  socket.emit(
+    "createPrivateRoom",
+    {
+      username:
+        getUsername()
+    }
+  );
+}
+```
+
+);
+
+$("#joinRoomBtn")
+?.addEventListener(
+"click",
+() => {
+
+```
+  const code =
+    $("#roomCodeInput")
+      .value
+      .trim()
+      .toUpperCase();
+
+  if (
+    code.length !== 5
+  ) {
+
+    toast(
+      "Enter a valid room code."
+    );
+
+    return;
+  }
+
+  socket.emit(
+    "joinPrivateRoom",
+    {
+      username:
+        getUsername(),
+
+      roomId:
+        code
+    }
+  );
+}
+```
+
+);
+
+$("#copyRoomBtn")
+?.addEventListener(
+"click",
+async () => {
+
+```
+  if (
+    !roomId
+  ) {
+
+    return;
+  }
+
+  await navigator
+    .clipboard
+    .writeText(
+      roomId
+    );
+
+  toast(
+    "Room code copied."
+  );
+}
+```
+
+);
+
+// -----------------------------
+// SOCKET EVENTS
+// -----------------------------
+
+socket.on(
+"privateRoomCreated",
+data => {
+
+```
+roomId =
+  data.roomId;
+
+$("#roomCodeDisplay")
+  .textContent =
+  roomId;
+
+showScreen(
+  "roomScreen"
+);
+```
+
+}
+);
+
+socket.on(
+"matchSearching",
+() => {
+
+```
+showScreen(
+  "waitingScreen"
+);
+```
+
+}
+);
+
+socket.on(
+"matchFound",
+data => {
+
+```
+roomId =
+  data.roomId;
+
+startOnlineGame();
+```
+
+}
+);
+
+socket.on(
+"state",
+state => {
+
+```
+if (
+  state.roomId
+) {
+
+  roomId =
+    state.roomId;
+}
+
+if (
+  currentMode !== "online"
+  &&
+  Object.keys(
+    state.players || {}
+  ).length > 0
+) {
+
+  startOnlineGame();
+}
+
+board =
+  state.board;
+
+turn =
+  state.turn;
+
+winner =
+  state.winner;
+
+winningLine =
+  state.winningLine || [];
+
+updateOnlinePlayers(
+  state.players
+);
+
+if (
+  winner
+  &&
+  currentMode === "online"
+) {
+
+  if (
+    winner === "draw"
+    ||
+    winner === mySymbol
+    ||
+    winner !== mySymbol
+  ) {
+
+    updateStats(
+      winner
+    );
+  }
+}
+
+if (
+  !winner
+) {
+
+  restartReady =
+    false;
+}
+
+render();
+```
+
+}
+);
+
+socket.on(
+"restartStatus",
+data => {
+
+```
+restartReady =
+  true;
+
+$("#statusText")
+  .textContent =
+  `${data.ready}/${data.total} Ready`;
+```
+
+}
+);
+
+socket.on(
+"opponentDisconnected",
+() => {
+
+```
+toast(
+  "Opponent disconnected."
+);
+
+$("#statusText")
+  .textContent =
+  "Opponent disconnected";
+```
+
+}
+);
+
+socket.on(
+"errorMessage",
+message => {
+
+```
+toast(
+  message
+);
+```
+
+}
+);
+
+window.addEventListener(
+"socketError",
+() => {
+
+```
+toast(
+  "Could not connect to server."
+);
+```
+
+}
+);
+
+// -----------------------------
+// SETTINGS
+// -----------------------------
+
+$("#themeSelect")
+?.addEventListener(
+"change",
+event => {
+
+```
+  document.body
+    .classList
+    .toggle(
+      "darker",
+      event.target.value ===
+      "darker"
+    );
+}
+```
+
+);
 
 updateProfile();
